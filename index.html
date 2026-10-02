@@ -254,8 +254,8 @@ function restore(){
       teams:Array.isArray(d.teams)?d.teams.map(t=>({name:str(t&&t.name),mem:Array.isArray(t&&t.mem)?t.mem.map(x=>str(x&&typeof x==="object"?x.id:x)):[]})):[]};
   }catch(e){}
 }
-/* 出力ファイル名は 開始年月+枝番(YYYYMMXX).csv で固定 */
-function fileName(){return `${S.year}${p2(S.month)}${p2(S.seq)}.csv`}
+/* 出力ファイル名は 開始年月+枝番 に -master を付けた YYYYMMXX-master.csv で固定 */
+function fileName(){return `${S.year}${p2(S.month)}${p2(S.seq)}-master.csv`}
 function indexPart(){POS=new Map(S.part.map((p,i)=>[p.id,i+1]))}       // 0番目は「選択」
 const nameOf=id=>{const i=POS.get(id);return i?S.part[i-1].n:""};
 
@@ -515,7 +515,7 @@ $("f2").addEventListener("submit",e=>{
   download(lastCSV,name);
   $("csv").value=lastCSV;
   $("outmsg").textContent=`${name} を出力した(${r.teams}チーム・${r.rows.length}人)。`;
-  const key=name.replace(/\.csv$/,""),nl=S.plan?S.plan.length:1;
+  const key=name.replace(/-master\.csv$/,""),nl=S.plan?S.plan.length:1;
   $("outnote").textContent=`このファイルを、データ用リポジトリ(event-data)にアップロードする。対局記録は ${key}-games1.csv`+(nl>1?`(2次リーグは ${key}-games2.csv、以降も同じ)`:"")+" の名前で置く。";
   $("copystat").textContent="";$("out").hidden=false;$("out").scrollIntoView({block:"nearest"});
 });
