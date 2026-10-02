@@ -96,6 +96,19 @@ select.in option:disabled{color:var(--muted)}
 .row3{display:grid;grid-template-columns:repeat(3,minmax(0,180px));gap:16px;align-items:start}
 textarea.in{font-family:"IBM Plex Mono",monospace;font-size:13px;line-height:1.5;min-height:180px;resize:vertical;white-space:pre}
 @media (max-width:480px){.row2{grid-template-columns:repeat(2,minmax(0,1fr))}.row3{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.card{padding:16px}}
+
+/* リーグごとの設定 */
+.lhead,.lrow{display:grid;grid-template-columns:3em minmax(0,1.5fr) minmax(0,.7fr) minmax(0,1.3fr);gap:8px;align-items:center}
+.lhead{font-size:11px;color:var(--muted);letter-spacing:.04em}
+.lrows{display:grid;gap:8px}
+.lno{font-size:12px;font-weight:700;color:var(--accent)}
+.lfix{padding:0 12px;color:var(--muted);font-size:15px}
+@media (max-width:560px){
+  .lhead{display:none}
+  .lrow{grid-template-columns:3em minmax(0,1fr) 5.5em}
+  .lrow select,.lrow .lfix:last-child{grid-column:2 / 4}
+  .lrow .lfix:last-child{display:none}
+}
 </style>
 </head>
 <body>
@@ -137,7 +150,7 @@ textarea.in{font-family:"IBM Plex Mono",monospace;font-size:13px;line-height:1.5
       <small>同じ年月の何番目の大会か</small>
     </div>
   </div>
-  <div class="row2">
+  <div class="row3">
     <div class="field">
       <label for="tcount">チーム数</label>
       <input id="tcount" class="in mono" type="number" inputmode="numeric" min="1" max="60" step="1" placeholder="12">
@@ -147,6 +160,17 @@ textarea.in{font-family:"IBM Plex Mono",monospace;font-size:13px;line-height:1.5
       <input id="tsize" class="in mono" type="number" inputmode="numeric" min="1" max="10" step="1" placeholder="4">
       <small>1チームあたりの人数</small>
     </div>
+    <div class="field">
+      <label for="lcount">リーグ数</label>
+      <input id="lcount" class="in mono" type="number" inputmode="numeric" min="1" max="5" step="1" placeholder="1">
+      <small>予選・セミファイナル・ファイナルなら 3</small>
+    </div>
+  </div>
+  <div class="field" id="lbox" hidden>
+    <span class="flabel">リーグごとの設定</span>
+    <div class="lhead" aria-hidden="true"><span></span><span>リーグ名</span><span>チーム数</span><span>PTの持ち越し</span></div>
+    <div class="lrows" id="lrows"></div>
+    <small>2次以降のチーム数は、そのリーグに進めるチーム数。前のリーグより少なく、4以上にする。持ち越しは、前のリーグのPTを次のリーグへどれだけ引き継ぐか。</small>
   </div>
   <div class="field">
     <span class="flabel" id="plabel">参加者リスト</span>
@@ -213,7 +237,7 @@ const MAXT=60,MAXS=10;
 /* 入力内容。
    part  = 参加者リスト [{n:名前,id}](名前順)
    teams = [{name:チーム名, mem:[選んだ参加者のID, …]}] */
-const blank=()=>{const d=new Date();return {name:"",year:String(d.getFullYear()),month:String(d.getMonth()+1),seq:"01",count:"",size:"",pfile:"",part:[],teams:[]}};
+const blank=()=>{const d=new Date();return {name:"",year:String(d.getFullYear()),month:String(d.getMonth()+1),seq:"01",count:"",size:"",lcount:"1",leagues:[],pfile:"",part:[],teams:[]}};
 let S=blank();
 let POS=new Map();      // 参加者ID → プルダウン内の位置(全プルダウン共通)
 let SELS=[];            // 2ページ目のプルダウン(チーム順・メンバー順)
@@ -224,7 +248,8 @@ function restore(){
   try{const d=JSON.parse(localStorage.getItem(KEY)||"null");
     if(!d||typeof d!=="object")return;
     const b=blank(),str=v=>typeof v==="string"||typeof v==="number"?String(v):"";
-    S={name:str(d.name),year:str(d.year)||b.year,month:str(d.month)||b.month,seq:str(d.seq)||b.seq,count:str(d.count),size:str(d.size),pfile:str(d.pfile),
+    S={name:str(d.name),year:str(d.year)||b.year,month:str(d.month)||b.month,seq:str(d.seq)||b.seq,count:str(d.count),size:str(d.size),lcount:str(d.lcount)||"1",pfile:str(d.pfile),
+      leagues:Array.isArray(d.leagues)?d.leagues.map(l=>({name:str(l&&l.name),teams:str(l&&l.teams),carry:["0","50","100"].includes(str(l&&l.carry))?str(l.carry):"0",auto:!!(l&&l.auto)})):[],
       part:Array.isArray(d.part)?d.part.filter(x=>x&&x.n&&x.id).map(x=>({n:String(x.n),id:String(x.id)})):[],
       teams:Array.isArray(d.teams)?d.teams.map(t=>({name:str(t&&t.name),mem:Array.isArray(t&&t.mem)?t.mem.map(x=>str(x&&typeof x==="object"?x.id:x)):[]})):[]};
   }catch(e){}
@@ -236,7 +261,52 @@ const nameOf=id=>{const i=POS.get(id);return i?S.part[i-1].n:""};
 
 /* ---------- 1ページ目 ---------- */
 function intIn(el,max,min=1){const v=norm(el.value);return /^\d+$/.test(v)&&+v>=min&&+v<=max?+v:null}
-const F1=["ename","eyear","emonth","eseq","tcount","tsize"];
+const F1=["ename","eyear","emonth","eseq","tcount","tsize","lcount"];
+const MAXL=5,MINADV=4;      // リーグは5次まで。2次以降は麻雀が打てる4チーム以上
+
+/* ---------- リーグ(1次・2次…)の設定 ---------- */
+const CARRY=[["0","持ち越さない"],["50","半分を持ち越す"],["100","全部を持ち越す"]];
+function defaultNames(n){return n===1?["本戦"]:n===2?["予選","ファイナル"]:n===3?["予選","セミファイナル","ファイナル"]:Array.from({length:n},(_,k)=>`${k+1}次リーグ`)}
+/* リーグ数に合わせて行を用意する。手で直していない名前は、リーグ数に合った初期値に入れ替える */
+function syncLeagues(){
+  const n=intIn($("lcount"),MAXL)||1,def=defaultNames(n);
+  for(let k=0;k<n;k++){ if(!S.leagues[k])S.leagues[k]={name:"",teams:"",carry:"0",auto:true}; const l=S.leagues[k]; if(l.auto||!l.name){l.name=def[k];l.auto=true} }
+  $("lbox").hidden=n<2;
+  $("lrows").innerHTML=n<2?"":S.leagues.slice(0,n).map((l,k)=>`<div class="lrow"><span class="lno">${k+1}次</span>
+<input id="ln${k}" class="in" type="text" maxlength="20" aria-label="${k+1}次リーグの名前" data-k="${k}" data-f="name" value="${esc(l.name)}">
+${k?`<input id="lt${k}" class="in mono" type="number" inputmode="numeric" min="${MINADV}" step="1" aria-label="${k+1}次リーグのチーム数" data-k="${k}" data-f="teams" value="${esc(l.teams)}">
+<select id="lc${k}" class="in" aria-label="${k+1}次リーグへのPTの持ち越し" data-k="${k}" data-f="carry">${CARRY.map(([v,t])=>`<option value="${v}"${v===l.carry?" selected":""}>${t}</option>`).join("")}</select>`
+   :`<output class="lfix mono" id="lt0">${esc(norm($("tcount").value)||"—")}</output><span class="lfix">—</span>`}</div>`).join("");
+}
+$("lrows").addEventListener("input",e=>{
+  const el=e.target,d=el.dataset; if(!d||d.k==null)return;
+  el.removeAttribute("aria-invalid");$("e1").textContent="";
+  const l=S.leagues[+d.k]; l[d.f]=el.value; if(d.f==="name")l.auto=false;
+  save();
+});
+/* リーグ構成を検査して返す。[{name,teams,carry}] */
+function checkLeagues(c,errs,bad){
+  const n=intIn($("lcount"),MAXL); if(n==null)return null;
+  if(n===1)return [{name:"本戦",teams:c,carry:0}];
+  const out=[],seen=new Set();let prev=c;
+  for(let k=0;k<n;k++){
+    const l=S.leagues[k],name=l.name.trim(),lab=`${k+1}次リーグ`;
+    if(!name){errs.push(`${lab}: リーグ名を入力する。`);bad.push(`ln${k}`)}
+    else if(/[:/]/.test(name)){errs.push(`${lab}: リーグ名に「:」「/」は使えない。`);bad.push(`ln${k}`)}
+    else if(seen.has(name)){errs.push(`${lab}: リーグ名「${name}」がほかのリーグと同じ。`);bad.push(`ln${k}`)}
+    seen.add(name);
+    let t=c;
+    if(k){
+      const v=norm(l.teams); t=/^\d+$/.test(v)?+v:null;
+      if(t==null){errs.push(`${lab}: チーム数を入力する。`);bad.push(`lt${k}`)}
+      else if(t<MINADV){errs.push(`${lab}: チーム数は${MINADV}以上にする(麻雀は4チーム必要)。`);bad.push(`lt${k}`)}
+      else if(prev!=null&&t>=prev){errs.push(`${lab}: チーム数は前のリーグ(${prev})より少なくする。`);bad.push(`lt${k}`)}
+    }
+    out.push({name,teams:t,carry:k?+l.carry:0}); if(t!=null)prev=t;
+  }
+  return out;
+}
+const leagueCode=L=>L.map((l,k)=>k?`${l.name}:${l.teams}:${l.carry}`:`${l.name}:${l.teams}`).join("/");
 function showPart(msg,bad){
   $("pstat").textContent=msg!=null?msg:S.part.length?`${S.pfile||"CSV"}・参加者 ${S.part.length}人`:"まだ読み込んでいない";
   $("pstat").style.color=bad?"var(--minus)":"";
@@ -252,26 +322,34 @@ $("p1").addEventListener("submit",e=>{
   $("eseq").setAttribute("aria-invalid",sq==null);
   $("tcount").setAttribute("aria-invalid",c==null);
   $("tsize").setAttribute("aria-invalid",z==null);
+  const ln=intIn($("lcount"),MAXL),lbad=[];
+  $("lcount").setAttribute("aria-invalid",ln==null);
+  $("lrows").querySelectorAll('[aria-invalid="true"]').forEach(x=>x.removeAttribute("aria-invalid"));
   if(!name)errs.push("大会名を入力する。");
   if(y==null)errs.push("開始年は西暦4桁(2000〜2099)で入力する。");
   if(mo==null)errs.push("開始月は1〜12で入力する。");
   if(sq==null)errs.push("枝番は01〜99で入力する。");
   if(c==null)errs.push(`チーム数は1〜${MAXT}の整数で入力する。`);
   if(z==null)errs.push(`チーム人数は1〜${MAXS}の整数で入力する。`);
+  if(ln==null)errs.push(`リーグ数は1〜${MAXL}の整数で入力する。`);
+  const LG=c!=null?checkLeagues(c,errs,lbad):null;
+  lbad.forEach(id=>$(id)&&$(id).setAttribute("aria-invalid","true"));
   if(!S.part.length)errs.push("参加者リストのCSVを読み込む。");
   else if(c!=null&&z!=null&&S.part.length<c*z)errs.push(`参加者が足りない。${c}チーム×${z}人で${c*z}人必要だが、参加者リストは${S.part.length}人。`);
   $("e1").textContent=errs.join("\n");
   if(errs.length){const f=$("p1").querySelector('[aria-invalid="true"]');(f||$("pfile")).focus();return}
-  S.name=name;S.year=String(y);S.month=String(mo);S.seq=p2(sq);S.count=c;S.size=z;save();
+  S.name=name;S.year=String(y);S.month=String(mo);S.seq=p2(sq);S.count=c;S.size=z;S.lcount=String(ln);S.plan=LG;save();
   $("emonth").value=S.month;$("eseq").value=S.seq;
   go(2,true);
 });
 F1.forEach(id=>$(id).addEventListener("input",()=>{
   $(id).removeAttribute("aria-invalid");$("e1").textContent="";
-  S.name=$("ename").value;S.year=$("eyear").value;S.month=$("emonth").value;S.seq=$("eseq").value;S.count=$("tcount").value;S.size=$("tsize").value;save();
+  S.name=$("ename").value;S.year=$("eyear").value;S.month=$("emonth").value;S.seq=$("eseq").value;S.count=$("tcount").value;S.size=$("tsize").value;S.lcount=$("lcount").value;save();
+  if(id==="lcount")syncLeagues();
+  if(id==="tcount"&&$("lt0"))$("lt0").textContent=norm($("tcount").value)||"—";
 }));
 $("eseq").addEventListener("blur",()=>{const v=intIn($("eseq"),99);if(v!=null){$("eseq").value=S.seq=p2(v);save()}});   // 1 → 01
-function fill1(){$("ename").value=S.name;$("eyear").value=S.year;$("emonth").value=S.month;$("eseq").value=S.seq;$("tcount").value=S.count;$("tsize").value=S.size;showPart()}
+function fill1(){$("ename").value=S.name;$("eyear").value=S.year;$("emonth").value=S.month;$("eseq").value=S.seq;$("tcount").value=S.count;$("tsize").value=S.size;$("lcount").value=S.lcount;syncLeagues();showPart()}
 let armed=0;
 $("reset").addEventListener("click",()=>{
   const b=$("reset");
@@ -343,7 +421,8 @@ function buildTeams(){
   for(let t=0;t<c;t++){ if(!S.teams[t])S.teams[t]={name:"",mem:[]};
     for(let m=0;m<z;m++){const id=S.teams[t].mem[m]; S.teams[t].mem[m]=id&&POS.has(id)&&!seen.has(id)?(seen.add(id),id):""} }
   $("fshow").textContent=fileName();
-  $("sum").innerHTML=`<span>大会名 <b>${esc(S.name)}</b></span><span>開始 <b class="mono">${S.year}</b>年<b class="mono">${+S.month}</b>月</span><span>枝番 <b class="mono">${p2(S.seq)}</b></span><span>チーム数 <b class="mono">${c}</b></span><span>チーム人数 <b class="mono">${z}</b>人</span><span>参加者 <b class="mono">${S.part.length}</b>人</span>`;
+  $("sum").innerHTML=`<span>大会名 <b>${esc(S.name)}</b></span><span>開始 <b class="mono">${S.year}</b>年<b class="mono">${+S.month}</b>月</span><span>枝番 <b class="mono">${p2(S.seq)}</b></span><span>チーム数 <b class="mono">${c}</b></span><span>チーム人数 <b class="mono">${z}</b>人</span><span>参加者 <b class="mono">${S.part.length}</b>人</span>`+
+    (S.plan&&S.plan.length>1?`<span>リーグ <b>${S.plan.map(l=>`${esc(l.name)} ${l.teams}`).join(" → ")}</b></span>`:"");
   // 同じ名前の参加者が居るときだけ、選択肢にIDを添える
   const cnt=new Map();S.part.forEach(p=>cnt.set(p.n,(cnt.get(p.n)||0)+1));
   const opts='<option value="">選択</option>'+S.part.map(p=>`<option value="${p.id}">${esc(p.n)}${cnt.get(p.n)>1?`(${p.id})`:""}</option>`).join("");
@@ -395,6 +474,7 @@ function refreshRest(){
 /* ---------- 検査と出力 ---------- */
 function collect(){
   const c=+S.count,z=+S.size,errs=[],bad=[],rows=[],names=new Map(),ids=new Map();
+  const code=leagueCode(S.plan&&S.plan.length?S.plan:[{name:"本戦",teams:c,carry:0}]);
   for(let t=0;t<c;t++){
     const T=S.teams[t],tn=T.name.trim(),lab=tn||`チーム${t+1}`;
     if(!tn){errs.push(`チーム${t+1}: チーム名が空欄。`);bad.push(`tn${t}`)}
@@ -405,13 +485,13 @@ function collect(){
       if(!id||!POS.has(id)){errs.push(`${lab} ${slot(m)}: 未選択。`);bad.push(`ms${t}_${m}`);continue}
       if(ids.has(id)){errs.push(`${lab} ${slot(m)}: ${nameOf(id)} が ${ids.get(id)} と重複している。`);bad.push(`ms${t}_${m}`);continue}
       ids.set(id,`${lab} ${slot(m)}`);
-      rows.push([S.name.trim(),tn,nameOf(id),id,m?"":"リーダー"]);
+      rows.push([S.name.trim(),tn,nameOf(id),id,m?"":"リーダー",code]);
     }
   }
   return {errs,bad,rows,teams:c};
 }
 const cell=v=>/[",\r\n]/.test(v)?`"${v.replace(/"/g,'""')}"`:v;
-function toCSV(rows){return [["大会名","チーム名","プレイヤー名","プレイヤーID","役割"],...rows].map(r=>r.map(cell).join(",")).join("\r\n")+"\r\n"}
+function toCSV(rows){return [["大会名","チーム名","プレイヤー名","プレイヤーID","役割","リーグ構成"],...rows].map(r=>r.map(cell).join(",")).join("\r\n")+"\r\n"}
 function download(csv,name){
   const url=URL.createObjectURL(new Blob(["﻿"+csv],{type:"text/csv;charset=utf-8"}));   // BOM付きUTF-8(Excelで文字化けしない)
   const a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
@@ -433,7 +513,8 @@ $("f2").addEventListener("submit",e=>{
   download(lastCSV,name);
   $("csv").value=lastCSV;
   $("outmsg").textContent=`${name} を出力した(${r.teams}チーム・${r.rows.length}人)。`;
-  $("outnote").textContent="このファイルを、データ用リポジトリ(event-data)にアップロードする。";
+  const key=name.replace(/\.csv$/,""),nl=S.plan?S.plan.length:1;
+  $("outnote").textContent=`このファイルを、データ用リポジトリ(event-data)にアップロードする。対局記録は ${key}-games1.csv`+(nl>1?`(2次リーグは ${key}-games2.csv、以降も同じ)`:"")+" の名前で置く。";
   $("copystat").textContent="";$("out").hidden=false;$("out").scrollIntoView({block:"nearest"});
 });
 $("again").addEventListener("click",()=>{if(lastCSV)download(lastCSV,fileName())});
