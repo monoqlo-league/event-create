@@ -163,7 +163,7 @@ textarea.in{font-family:"IBM Plex Mono",monospace;font-size:13px;line-height:1.5
     <div class="field">
       <label for="lcount">リーグ数</label>
       <input id="lcount" class="in mono" type="number" inputmode="numeric" min="1" max="5" step="1" placeholder="1">
-      <small>予選・セミファイナル・ファイナルなら 3</small>
+      <small>1〜5(上限は5)。予選・セミファイナル・ファイナルなら 3</small>
     </div>
   </div>
   <div class="field" id="lbox" hidden>
@@ -266,7 +266,9 @@ const MAXL=5,MINADV=4;      // リーグは5次まで。2次以降は麻雀が�
 
 /* ---------- リーグ(1次・2次…)の設定 ---------- */
 const CARRY=[["0","持ち越さない"],["50","半分を持ち越す"],["100","全部を持ち越す"]];
-function defaultNames(n){return n===1?["本戦"]:n===2?["予選","ファイナル"]:n===3?["予選","セミファイナル","ファイナル"]:Array.from({length:n},(_,k)=>`${k+1}次リーグ`)}
+/* リーグ名の初期値。4以上のときも、最後はファイナル、その1つ前はセミファイナル */
+function defaultNames(n){return n===1?["本戦"]:n===2?["予選","ファイナル"]:n===3?["予選","セミファイナル","ファイナル"]
+  :Array.from({length:n},(_,k)=>k===n-1?"ファイナル":k===n-2?"セミファイナル":`${k+1}次リーグ`)}
 /* リーグ数に合わせて行を用意する。手で直していない名前は、リーグ数に合った初期値に入れ替える */
 function syncLeagues(){
   const n=intIn($("lcount"),MAXL)||1,def=defaultNames(n);
