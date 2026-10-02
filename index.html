@@ -430,7 +430,7 @@ $("f2").addEventListener("submit",e=>{
   download(lastCSV,name);
   $("csv").value=lastCSV;
   $("outmsg").textContent=`${name} を出力した(${r.teams}チーム・${r.rows.length}人)。`;
-  $("outnote").textContent="このファイルを、データ用リポジトリ(monoqlo-data)の event フォルダにアップロードする。";
+  $("outnote").textContent="このファイルを、データ用リポジトリ(event-data)にアップロードする。";
   $("copystat").textContent="";$("out").hidden=false;$("out").scrollIntoView({block:"nearest"});
 });
 $("again").addEventListener("click",()=>{if(lastCSV)download(lastCSV,fileName())});
