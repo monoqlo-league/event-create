@@ -81,10 +81,11 @@ h1{font-size:clamp(26px,5vw,36px);font-weight:900;line-height:1.25;margin:0;text
 .team legend{float:left;width:100%;padding:0;font-size:12px;font-weight:700;letter-spacing:.08em;color:var(--accent)}
 .team legend+*{clear:both}
 .tn{font-weight:700}
-.mhead,.mrow{display:grid;grid-template-columns:1.2em 6.6em minmax(0,1fr);gap:6px;align-items:center}
+.mhead,.mrow{display:grid;grid-template-columns:46px 96px minmax(0,1fr);gap:6px;align-items:center}
 .mhead{font-size:11px;color:var(--muted);letter-spacing:.04em}
 .mrows{display:grid;gap:6px}
 .no{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted);text-align:center}
+.no.lead{font-family:inherit;font-size:11px;font-weight:700;color:var(--accent);letter-spacing:0;white-space:nowrap}
 .mrow .in{padding:7px 9px;font-size:15px}
 @media (max-width:600px){.mrow .in{font-size:16px}}
 .mid{font-family:"IBM Plex Mono",monospace;font-size:13px;font-variant-numeric:tabular-nums;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -334,6 +335,7 @@ window.addEventListener("popstate",e=>go(e.state&&e.state.p===2&&+S.count&&+S.si
 $("back").addEventListener("click",()=>{ if(history.state&&history.state.p===2)history.back(); else go(1,false) });
 
 /* ---------- 2ページ目 ---------- */
+const slot=m=>m?`メンバー${m+1}`:"リーダー";      // 各チームのいちばん上の枠がリーダー
 function buildTeams(){
   const c=+S.count,z=+S.size;
   // 選択済みの内容は残したまま、チーム数・人数に合わせて枠を用意する。同じ人が2枠に入っていたら後ろを外す
@@ -350,9 +352,10 @@ function buildTeams(){
     h+=`<fieldset class="team"><legend>チーム ${t+1}</legend>
 <input id="tn${t}" class="in tn" type="text" maxlength="40" placeholder="チーム名" aria-label="チーム${t+1}のチーム名" data-t="${t}" value="${esc(S.teams[t].name)}">
 <div class="mhead"><span></span><span>メンバーID</span><span>メンバー名</span></div><div class="mrows">`;
-    for(let m=0;m<z;m++) h+=`<div class="mrow"><span class="no">${m+1}</span>
+    // いちばん上の枠がリーダー
+    for(let m=0;m<z;m++) h+=`<div class="mrow"><span class="no${m?"":" lead"}">${m?m+1:"リーダー"}</span>
 <output class="mid" id="mi${t}_${m}" for="ms${t}_${m}"></output>
-<select id="ms${t}_${m}" class="in ms" aria-label="チーム${t+1} メンバー${m+1}" data-t="${t}" data-m="${m}">${opts}</select></div>`;
+<select id="ms${t}_${m}" class="in ms" aria-label="チーム${t+1} ${slot(m)}" data-t="${t}" data-m="${m}">${opts}</select></div>`;
     h+=`</div></fieldset>`;
   }
   $("teams").innerHTML=h;
@@ -399,16 +402,16 @@ function collect(){
     else names.set(tn,t);
     for(let m=0;m<z;m++){
       const id=T.mem[m];
-      if(!id||!POS.has(id)){errs.push(`${lab} メンバー${m+1}: 未選択。`);bad.push(`ms${t}_${m}`);continue}
-      if(ids.has(id)){errs.push(`${lab} メンバー${m+1}: ${nameOf(id)} が ${ids.get(id)} と重複している。`);bad.push(`ms${t}_${m}`);continue}
-      ids.set(id,`${lab} メンバー${m+1}`);
-      rows.push([S.name.trim(),tn,nameOf(id),id]);
+      if(!id||!POS.has(id)){errs.push(`${lab} ${slot(m)}: 未選択。`);bad.push(`ms${t}_${m}`);continue}
+      if(ids.has(id)){errs.push(`${lab} ${slot(m)}: ${nameOf(id)} が ${ids.get(id)} と重複している。`);bad.push(`ms${t}_${m}`);continue}
+      ids.set(id,`${lab} ${slot(m)}`);
+      rows.push([S.name.trim(),tn,nameOf(id),id,m?"":"リーダー"]);
     }
   }
   return {errs,bad,rows,teams:c};
 }
 const cell=v=>/[",\r\n]/.test(v)?`"${v.replace(/"/g,'""')}"`:v;
-function toCSV(rows){return [["大会名","チーム名","プレイヤー名","プレイヤーID"],...rows].map(r=>r.map(cell).join(",")).join("\r\n")+"\r\n"}
+function toCSV(rows){return [["大会名","チーム名","プレイヤー名","プレイヤーID","役割"],...rows].map(r=>r.map(cell).join(",")).join("\r\n")+"\r\n"}
 function download(csv,name){
   const url=URL.createObjectURL(new Blob(["﻿"+csv],{type:"text/csv;charset=utf-8"}));   // BOM付きUTF-8(Excelで文字化けしない)
   const a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
