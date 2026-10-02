@@ -1,5 +1,7 @@
 # MONOQLO 大会CSV作成ツール
 
+ページ: https://monoqlo-league.github.io/event-create/
+
 MONOQLO麻雀部 チーム戦(イベント戦)の「チーム表」を作るページ(`index.html`)を置くリポジトリ。
 チーム名とメンバーを画面で登録し、ランキングページ(event-ranking)が読み込むCSVを出力する。
 
